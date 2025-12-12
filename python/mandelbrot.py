@@ -40,7 +40,6 @@ def mandelbrot_set_vectorized(
     """
     マンデルブロ集合をベクトル化して高速に計算する
     """
-    import sys
 
     x = np.linspace(xmin, xmax, width)
     y = np.linspace(ymin, ymax, height)
@@ -143,13 +142,22 @@ class MandelbrotViewer:
 
         # 操作説明
         help_text = (
-            "操作: ホイール=拡大/縮小, 左クリック=移動, "
-            "右クリック=ズームイン, r=リセット, s=保存, q=終了"
+            "操作:\n"
+            "  - ホイール: 拡大/縮小\n"
+            "  - 左クリック: クリック位置を中心に移動（パン）\n"
+            "  - 右クリック: クリック位置を中心にズームイン\n"
+            "  - r: リセット, s: 保存, q: 終了"
         )
         self.fig.text(
-            0.5, 0.02, help_text, fontsize=9,
-            ha='center', transform=self.fig.transFigure,
-            bbox=dict(boxstyle='round', facecolor='lightblue', alpha=0.8)
+            0.5, 0.02, help_text,
+            fontsize=9,
+            ha='center',
+            transform=self.fig.transFigure,
+            bbox=dict(
+                boxstyle='round',
+                facecolor='lightblue',
+                alpha=0.8
+            )
         )
 
         # イベントハンドラ接続
@@ -193,7 +201,10 @@ class MandelbrotViewer:
             return
 
         # ズーム倍率
-        zoom_factor = ZOOM_FACTOR_SCROLL_UP if event.button == 'up' else ZOOM_FACTOR_SCROLL_DOWN
+        zoom_factor = (
+            ZOOM_FACTOR_SCROLL_UP if event.button == 'up'
+            else ZOOM_FACTOR_SCROLL_DOWN
+        )
 
         # マウス位置を中心にズーム
         x_center = event.xdata
