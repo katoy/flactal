@@ -16,6 +16,7 @@
 use image::{ImageBuffer, Rgb};
 use mandelbrot::common::{
     colors::iter_to_color_u32,
+    constants::*,
     font::draw_text,
     mandelbrot::{mandelbrot_iter_fast, mandelbrot_iter_hp},
 };
@@ -24,26 +25,6 @@ use num_complex::Complex;
 use rayon::prelude::*;
 use rug::Float;
 use std::time::Instant;
-
-// マンデルブロ描画領域のサイズ
-const MANDELBROT_WIDTH: usize = 800;
-const MANDELBROT_HEIGHT: usize = 600;
-
-// 高精度モード時の低解像度設定（計算時間短縮のため）
-const HP_RENDER_WIDTH: usize = 200;
-const HP_RENDER_HEIGHT: usize = 150;
-
-// カラーバーの設定
-const COLORBAR_WIDTH: usize = 60;
-const COLORBAR_MARGIN: usize = 20;
-const COLORBAR_BAR_WIDTH: usize = 20;
-
-// 全体のウィンドウサイズ
-const WINDOW_WIDTH: usize = MANDELBROT_WIDTH + COLORBAR_WIDTH;
-const WINDOW_HEIGHT: usize = MANDELBROT_HEIGHT;
-
-const MAX_ITER: u32 = 256;
-const PRECISION_THRESHOLD: f64 = 1e13;
 
 /// 計算モード
 #[derive(Clone, Copy, PartialEq)]
@@ -77,7 +58,7 @@ struct ViewerState {
 
 impl ViewerState {
     fn new() -> Self {
-        let prec = 128u32;
+        let prec = INITIAL_PRECISION;
         let mut state = Self {
             x_min: Float::with_val(prec, -2.5),
             x_max: Float::with_val(prec, 1.0),
@@ -95,7 +76,7 @@ impl ViewerState {
     }
 
     fn reset(&mut self) {
-        let prec = 128u32;
+        let prec = INITIAL_PRECISION;
         self.x_min = Float::with_val(prec, -2.5);
         self.x_max = Float::with_val(prec, 1.0);
         self.y_min = Float::with_val(prec, -1.5);
@@ -117,8 +98,8 @@ impl ViewerState {
         if zoom > PRECISION_THRESHOLD {
             self.compute_mode = ComputeMode::HighPrecision;
             let required_precision = (zoom.log2() * 3.5) as u32 + 64;
-            if required_precision > self.precision && self.precision < 4096 {
-                self.precision = (required_precision.next_power_of_two()).min(4096);
+            if required_precision > self.precision && self.precision < MAX_PRECISION {
+                self.precision = (required_precision.next_power_of_two()).min(MAX_PRECISION);
                 self.x_min.set_prec(self.precision);
                 self.x_max.set_prec(self.precision);
                 self.y_min.set_prec(self.precision);
@@ -133,31 +114,44 @@ impl ViewerState {
         }
     }
 
+    /// 画面上のピクセル座標を複素平面上の座標に変換
+    fn pixel_to_complex(&self, x: f64, y: f64) -> (f64, f64) {
+        let width_f = self.x_max.to_f64() - self.x_min.to_f64();
+        let height_f = self.y_max.to_f64() - self.y_min.to_f64();
+
+        let cx = self.x_min.to_f64() + width_f * (x / MANDELBROT_WIDTH as f64);
+        let cy = self.y_max.to_f64() - height_f * (y / MANDELBROT_HEIGHT as f64);
+        (cx, cy)
+    }
+
+    /// 指定された中心座標と現在のズーム倍率で範囲を更新
+    fn update_bounds(&mut self, center_x: f64, center_y: f64, width_scale: f64) {
+        let prec = self.precision;
+        let width_f = self.x_max.to_f64() - self.x_min.to_f64();
+        let height_f = self.y_max.to_f64() - self.y_min.to_f64();
+
+        let new_width = width_f * width_scale;
+        let new_height = height_f * width_scale;
+        let half_new_width = new_width / 2.0;
+        let half_new_height = new_height / 2.0;
+
+        self.x_min = Float::with_val(prec, center_x - half_new_width);
+        self.x_max = Float::with_val(prec, center_x + half_new_width);
+        self.y_min = Float::with_val(prec, center_y - half_new_height);
+        self.y_max = Float::with_val(prec, center_y + half_new_height);
+
+        self.update_compute_mode();
+        self.needs_redraw = true;
+    }
+
     fn zoom(&mut self, mouse_x: f64, mouse_y: f64, factor: f64) {
         // カラーバー領域では無視
         if mouse_x >= MANDELBROT_WIDTH as f64 {
             return;
         }
 
-        let prec = self.precision;
-        let width_f = self.x_max.to_f64() - self.x_min.to_f64();
-        let height_f = self.y_max.to_f64() - self.y_min.to_f64();
-
-        let cx = self.x_min.to_f64() + width_f * (mouse_x / MANDELBROT_WIDTH as f64);
-        let cy = self.y_max.to_f64() - height_f * (mouse_y / MANDELBROT_HEIGHT as f64);
-
-        let new_width = width_f * factor;
-        let new_height = height_f * factor;
-        let half_new_width = new_width / 2.0;
-        let half_new_height = new_height / 2.0;
-
-        self.x_min = Float::with_val(prec, cx - half_new_width);
-        self.x_max = Float::with_val(prec, cx + half_new_width);
-        self.y_min = Float::with_val(prec, cy - half_new_height);
-        self.y_max = Float::with_val(prec, cy + half_new_height);
-
-        self.update_compute_mode();
-        self.needs_redraw = true;
+        let (cx, cy) = self.pixel_to_complex(mouse_x, mouse_y);
+        self.update_bounds(cx, cy, factor);
     }
 
     /// クリック位置を画面中心に移動（パン）
@@ -167,24 +161,8 @@ impl ViewerState {
             return;
         }
 
-        let prec = self.precision;
-        let width_f = self.x_max.to_f64() - self.x_min.to_f64();
-        let height_f = self.y_max.to_f64() - self.y_min.to_f64();
-
-        // クリック位置を複素平面上の座標に変換
-        let cx = self.x_min.to_f64() + width_f * (mouse_x / MANDELBROT_WIDTH as f64);
-        let cy = self.y_max.to_f64() - height_f * (mouse_y / MANDELBROT_HEIGHT as f64);
-
-        // クリック位置を中心にする（ズームは維持）
-        let half_width = width_f / 2.0;
-        let half_height = height_f / 2.0;
-
-        self.x_min = Float::with_val(prec, cx - half_width);
-        self.x_max = Float::with_val(prec, cx + half_width);
-        self.y_min = Float::with_val(prec, cy - half_height);
-        self.y_max = Float::with_val(prec, cy + half_height);
-
-        self.needs_redraw = true;
+        let (cx, cy) = self.pixel_to_complex(mouse_x, mouse_y);
+        self.update_bounds(cx, cy, 1.0); // 倍率は1.0（変えない）
     }
 
     /// カラーバーを描画
@@ -330,6 +308,9 @@ fn render_high_precision(state: &mut ViewerState) {
     let offset_y = (MANDELBROT_HEIGHT - HP_RENDER_HEIGHT) / 2;
     state.mandelbrot_buffer = vec![0x202020u32; MANDELBROT_WIDTH * MANDELBROT_HEIGHT];
 
+    // プログレスバー更新頻度調整: 全体の1%ごとに更新 (ただし最低1回)
+    let update_interval = std::cmp::max(1, HP_RENDER_HEIGHT / 100);
+
     for py in 0..HP_RENDER_HEIGHT {
         // 計算
         for px in 0..HP_RENDER_WIDTH {
@@ -347,19 +328,21 @@ fn render_high_precision(state: &mut ViewerState) {
                 low_res_pixels[py * HP_RENDER_WIDTH + px];
         }
 
-        // コンソールにプログレスバーを表示
-        let progress = (py + 1) as f64 / HP_RENDER_HEIGHT as f64;
-        let bar_width = 30;
-        let filled = (progress * bar_width as f64) as usize;
-        let empty = bar_width - filled;
-        print!(
-            "\r🔬 計算中: [{}{}] {:>3}%",
-            "█".repeat(filled),
-            "░".repeat(empty),
-            ((py + 1) * 100 / HP_RENDER_HEIGHT)
-        );
-        use std::io::Write;
-        std::io::stdout().flush().ok();
+        // コンソールにプログレスバーを表示 (間引いて更新)
+        if py % update_interval == 0 || py == HP_RENDER_HEIGHT - 1 {
+            let progress = (py + 1) as f64 / HP_RENDER_HEIGHT as f64;
+            let bar_width = 30;
+            let filled = (progress * bar_width as f64) as usize;
+            let empty = bar_width - filled;
+            print!(
+                "\r🔬 計算中: [{}{}] {:>3}%",
+                "█".repeat(filled),
+                "░".repeat(empty),
+                ((py + 1) * 100 / HP_RENDER_HEIGHT)
+            );
+            use std::io::Write;
+            std::io::stdout().flush().ok();
+        }
     }
     println!(" 完了!");
 }
@@ -431,7 +414,7 @@ fn main() {
         if let Some((mx, my)) = window.get_mouse_pos(MouseMode::Discard) {
             if let Some(scroll) = window.get_scroll_wheel() {
                 if prev_scroll != Some(scroll) {
-                    let factor = if scroll.1 > 0.0 { 0.8 } else { 1.25 };
+                    let factor = if scroll.1 > 0.0 { ZOOM_FACTOR_IN } else { ZOOM_FACTOR_OUT };
                     state.zoom(mx as f64, my as f64, factor);
                     prev_scroll = Some(scroll);
                 }
@@ -447,7 +430,7 @@ fn main() {
             prev_left_down = left_down;
 
             if window.get_mouse_down(MouseButton::Right) {
-                state.zoom(mx as f64, my as f64, 0.8);
+                state.zoom(mx as f64, my as f64, ZOOM_FACTOR_IN);
             }
         }
 

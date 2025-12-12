@@ -26,3 +26,12 @@ pub const INITIAL_PRECISION: u32 = 128;
 
 /// 最大精度（ビット）
 pub const MAX_PRECISION: u32 = 4096;
+
+/// 高精度計算モードへの切り替え閾値（ズーム倍率）
+pub const PRECISION_THRESHOLD: f64 = 1e13;
+
+/// マウスホイールによるズームアウト倍率
+pub const ZOOM_FACTOR_OUT: f64 = 1.25;
+
+/// マウスホイールによるズームイン倍率（右クリックも同様）
+pub const ZOOM_FACTOR_IN: f64 = 0.8;
