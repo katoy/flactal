@@ -12,9 +12,9 @@ venv/
 env/
 
 # Rust
-/rust/target/
+target/
 **/*.rs.bk
-Cargo.lock
+# Cargo.lock はバイナリプロジェクトではバージョン固定のためコミット推奨
 
 # IDE
 .idea/

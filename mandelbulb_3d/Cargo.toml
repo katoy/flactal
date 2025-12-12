@@ -1,0 +1,10 @@
+[package]
+name = "mandelbulb_3d"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+glam = "0.30.9"
+image = "0.25.9"
+minifb = "0.27"
+rayon = "1.10"
