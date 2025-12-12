@@ -16,6 +16,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
 import matplotlib as mpl
+import sys
+
+# 定数
+INITIAL_BOUNDS = (-2.5, 1.0, -1.5, 1.5)  # 初期表示範囲 (xmin, xmax, ymin, ymax)
+ZOOM_FACTOR_SCROLL_UP = 0.8  # マウスホイール上方向（ズームアウト）
+ZOOM_FACTOR_SCROLL_DOWN = 1.25  # マウスホイール下方向（ズームイン）
+ZOOM_FACTOR_RIGHT_CLICK = 0.8  # 右クリック（ズームイン）
 
 # macOS用の日本語フォント設定
 mpl.rcParams['font.family'] = [
@@ -44,13 +51,16 @@ def mandelbrot_set_vectorized(
     M = np.zeros_like(C, dtype=float)
 
     bar_width = 30
+    # プログレスバー更新頻度を調整: max_iter の1%ごとに更新 (ただし最低1回は更新)
+    update_interval = max(1, max_iter // 100)
+
     for i in range(max_iter):
         mask = np.abs(Z) <= 2
         Z[mask] = Z[mask] * Z[mask] + C[mask]
         M[mask] = i + 1
 
         # プログレスバー表示
-        if show_progress:
+        if show_progress and (i % update_interval == 0 or i == max_iter - 1):
             progress = (i + 1) / max_iter
             filled = int(progress * bar_width)
             empty = bar_width - filled
@@ -93,7 +103,7 @@ class MandelbrotViewer:
         self.cmap = create_colormap()
 
         # 初期表示範囲
-        self.initial_bounds = (-2.5, 1.0, -1.5, 1.5)
+        self.initial_bounds = INITIAL_BOUNDS
         self.xmin, self.xmax, self.ymin, self.ymax = self.initial_bounds
 
         # 画像保存カウンタ
@@ -183,7 +193,7 @@ class MandelbrotViewer:
             return
 
         # ズーム倍率
-        zoom_factor = 0.8 if event.button == 'up' else 1.25
+        zoom_factor = ZOOM_FACTOR_SCROLL_UP if event.button == 'up' else ZOOM_FACTOR_SCROLL_DOWN
 
         # マウス位置を中心にズーム
         x_center = event.xdata
@@ -220,7 +230,7 @@ class MandelbrotViewer:
         elif event.button == 3:  # 右クリック: ズームイン (1.25x)
             x_center = event.xdata
             y_center = event.ydata
-            zoom_factor = 0.8  # Rust版と同じ倍率
+            zoom_factor = ZOOM_FACTOR_RIGHT_CLICK  # 定数を使用
 
             x_range = (self.xmax - self.xmin) * zoom_factor
             y_range = (self.ymax - self.ymin) * zoom_factor
