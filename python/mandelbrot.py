@@ -140,7 +140,7 @@ def print_progress_bar(
     empty = bar_width - filled
     percent = int(progress * 100)
     sys.stdout.write(
-        f"\r🔄 計算中: [{'█' * filled}{'░' * empty}] {percent:>3}%"
+        f"\r🔄 計算中(py): [{'█' * filled}{'░' * empty}] {percent:>3}%"
     )
     sys.stdout.flush()
 
@@ -185,7 +185,16 @@ def format_usage_for_gui() -> str:
 # =============================================================================
 # マンデルブロ集合計算
 # =============================================================================
-def mandelbrot_set_vectorized(
+
+# Rust拡張の読み込みを試行
+try:
+    import mandelbrot_rs
+    _USE_RUST = True
+except ImportError:
+    _USE_RUST = False
+
+
+def _mandelbrot_python(
     xmin: float,
     xmax: float,
     ymin: float,
@@ -195,21 +204,7 @@ def mandelbrot_set_vectorized(
     max_iter: int,
     show_progress: bool = True
 ) -> np.ndarray:
-    """マンデルブロ集合をベクトル化して高速に計算する。
-
-    Args:
-        xmin: x軸の最小値
-        xmax: x軸の最大値
-        ymin: y軸の最小値
-        ymax: y軸の最大値
-        width: 画像幅 (ピクセル)
-        height: 画像高さ (ピクセル)
-        max_iter: 最大反復回数
-        show_progress: プログレスバーを表示するか
-
-    Returns:
-        反復回数を格納した2次元配列 (height x width)
-    """
+    """Pure Python版マンデルブロ集合計算 (フォールバック用)。"""
     # 複素平面上のグリッドを生成
     x = np.linspace(xmin, xmax, width)
     y = np.linspace(ymin, ymax, height)
@@ -236,6 +231,51 @@ def mandelbrot_set_vectorized(
         print(" 完了!")
 
     return M
+
+
+def mandelbrot_set_vectorized(
+    xmin: float,
+    xmax: float,
+    ymin: float,
+    ymax: float,
+    width: int,
+    height: int,
+    max_iter: int,
+    show_progress: bool = True
+) -> np.ndarray:
+    """マンデルブロ集合を計算する。
+
+    Rust拡張が利用可能な場合は高速なRust版を使用し、
+    そうでない場合はPure Python版にフォールバックする。
+
+    Args:
+        xmin: x軸の最小値
+        xmax: x軸の最大値
+        ymin: y軸の最小値
+        ymax: y軸の最大値
+        width: 画像幅 (ピクセル)
+        height: 画像高さ (ピクセル)
+        max_iter: 最大反復回数
+        show_progress: プログレスバーを表示するか
+
+    Returns:
+        反復回数を格納した2次元配列 (height x width)
+    """
+    if _USE_RUST:
+        if show_progress:
+            sys.stdout.write("🚀 Rust版で計算中...")
+            sys.stdout.flush()
+        result = mandelbrot_rs.mandelbrot_set_vectorized(
+            xmin, xmax, ymin, ymax, width, height, max_iter
+        )
+        if show_progress:
+            print(" 完了!")
+        return result
+    else:
+        return _mandelbrot_python(
+            xmin, xmax, ymin, ymax, width, height, max_iter, show_progress
+        )
+
 
 
 # =============================================================================
