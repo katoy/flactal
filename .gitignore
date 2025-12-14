@@ -1,31 +1,51 @@
+# ===================
 # Python
+# ===================
 __pycache__/
 *.py[cod]
 *$py.class
+*.so
+.Python
 *.egg-info/
 dist/
 build/
 .eggs/
 *.egg
+
+# 仮想環境
 .venv/
 venv/
 env/
+ENV/
 
+# ===================
 # Rust
+# ===================
 target/
 **/*.rs.bk
 # Cargo.lock はバイナリプロジェクトではバージョン固定のためコミット推奨
 
-# IDE
+# ===================
+# IDE / エディタ
+# ===================
 .idea/
 .vscode/
 *.swp
 *.swo
 *~
 
+# ===================
 # OS
+# ===================
 .DS_Store
 Thumbs.db
 
-# 生成画像
+# ===================
+# プロジェクト固有
+# ===================
+# 生成画像 (サンプル以外)
 mandelbrot_*.png
+mandelbulb_*.png
+
+# mandelbulb_3d のスクリーンショット保存フォルダ
+mandelbulb_3d/assets/
